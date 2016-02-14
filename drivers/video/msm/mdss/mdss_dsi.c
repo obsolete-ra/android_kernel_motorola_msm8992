@@ -34,6 +34,10 @@
 
 #define XO_CLK_RATE	19200000
 
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
+#endif
+
 static struct dsi_drv_cm_data shared_ctrl_data;
 
 static int mdss_dsi_hndl_enable_te(struct mdss_dsi_ctrl_pdata *ctrl,
