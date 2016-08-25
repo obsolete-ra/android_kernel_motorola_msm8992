@@ -1598,10 +1598,12 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 	return rc;
 }
 
+/* enable interface from timed output class */
 static void qpnp_timed_enable_worker(struct work_struct *work)
 {
 	struct qpnp_hap *hap = container_of(work, struct qpnp_hap,
 					 td_work);
+	int rc = 0;
 	int value;
 
 	spin_lock(&hap->td_lock);
@@ -1636,8 +1638,8 @@ static void qpnp_timed_enable_worker(struct work_struct *work)
 
 	if (value)
 		hrtimer_start(&hap->hap_timer,
-			      ktime_set(value / 1000, (value % 1000) * 1000000),
-			      HRTIMER_MODE_REL);
+                              ktime_set(value / 1000, (value % 1000) * 1000000),
+                              HRTIMER_MODE_REL);
 }
 
 /* enable interface from timed output class */
