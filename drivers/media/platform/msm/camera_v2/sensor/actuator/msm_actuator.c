@@ -1377,7 +1377,7 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		if (a_ctrl->func_tbl &&
 			a_ctrl->func_tbl->actuator_set_default_focus)
 			rc = a_ctrl->func_tbl->actuator_set_default_focus(
-				a_ctrl,	&cdata->cfg.move);
+				a_ctrl, &cdata->cfg.move);
 		if (rc < 0)
 			pr_err("move focus failed %d\n", rc);
 		break;
