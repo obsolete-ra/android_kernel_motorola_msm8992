@@ -1296,9 +1296,20 @@ static int msm_isp_buf_mgr_debug(struct msm_isp_buf_mgr *buf_mgr)
 {
 	struct msm_isp_buffer *bufs = NULL;
 	uint32_t i = 0, j = 0, k = 0, rc = 0;
-	char *print_buf = NULL, temp_buf[512];
-	uint32_t print_buf_size = 2000;
-	unsigned long start_addr = 0, end_addr = 0;
+	char *print_buf = NULL, temp_buf[100];
+	uint32_t start_addr = 0, end_addr = 0, print_buf_size = 2000;
+	int buf_addr_delta = -1;
+	int temp_delta = 0;
+	uint32_t debug_stream_id = 0;
+	uint32_t debug_buf_idx = 0;
+	uint32_t debug_buf_plane = 0;
+	uint32_t debug_start_addr = 0;
+	uint32_t debug_end_addr = 0;
+	uint32_t debug_frame_id = 0;
+	enum msm_isp_buffer_state debug_state = 0;
+	unsigned long flags;
+	struct msm_isp_bufq *bufq = NULL;
+
 	if (!buf_mgr) {
 		pr_err_ratelimited("%s: %d] NULL buf_mgr\n",
 			__func__, __LINE__);

@@ -3424,6 +3424,115 @@ static void smbchg_regulator_deinit(struct smbchg_chip *chip)
 static int vf_adjust_low_threshold = 5;
 module_param(vf_adjust_low_threshold, int, 0644);
 
+	/* only execute workaround if the charger is version 1.x */
+	if (chip->revision[DIG_MAJOR] > 1)
+		return 0;
+
+	mutex_lock(&chip->current_change_lock);
+	pr_smb(PR_STATUS, "low icl %s -> %s\n",
+			chip->low_icl_wa_on ? "on" : "off",
+			enable ? "on" : "off");
+	if (enable == chip->low_icl_wa_on)
+		goto out;
+
+	chip->low_icl_wa_on = enable;
+	if (enable) {
+		rc = smbchg_sec_masked_write(chip,
+					chip->usb_chgpth_base + CHGPTH_CFG,
+					CFG_USB_2_3_SEL_BIT, CFG_USB_2);
+		rc |= smbchg_masked_write(chip, chip->usb_chgpth_base + CMD_IL,
+					USBIN_MODE_CHG_BIT | USB51_MODE_BIT,
+					USBIN_LIMITED_MODE | USB51_100MA);
+		if (rc)
+			dev_err(chip->dev,
+				"could not set low current limit: %d\n", rc);
+	} else {
+		rc = smbchg_set_thermal_limited_usb_current_max(chip,
+						chip->usb_target_current_ma);
+		if (rc)
+			dev_err(chip->dev,
+				"could not set current limit: %d\n", rc);
+	}
+out:
+	mutex_unlock(&chip->current_change_lock);
+	return rc;
+}
+
+#define DISCHARGE_WHILE_PLUGGED_THRESHOLD	3
+#define DISCHARGE_WHILE_PLUGGED_LOOP_TIME_MS	10000
+static void smbchg_discharge_while_plugged_check(struct work_struct *work)
+{
+	int rc = 0;
+	u8 reg = 0, chg_type;
+	bool valid_chg_disabled, status_full, chg_inhibit;
+	bool unused;
+	struct smbchg_chip *chip = container_of(work,
+					struct smbchg_chip,
+					discharge_while_plugged_work.work);
+
+	/* charger not present  stop work loop */
+	if (!(is_usb_present(chip) || is_dc_present(chip))) {
+		pr_smb(PR_MISC, "No charge source connected\n");
+		atomic_set(&chip->discharge_while_plugged_event_count, 0);
+		return;
+	}
+
+	rc = smbchg_read(chip, &reg, chip->chgr_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Unable to read RT_STS rc = %d\n", rc);
+		atomic_set(&chip->discharge_while_plugged_event_count, 0);
+		goto discharge_while_plugged_check_error;
+	}
+
+	status_full = reg & BAT_TCC_REACHED_BIT;
+
+	chg_inhibit = reg & CHG_INHIBIT_BIT;
+
+	rc = smbchg_read(chip, &reg, chip->chgr_base + CHGR_STS, 1);
+	if (rc < 0) {
+		atomic_set(&chip->discharge_while_plugged_event_count, 0);
+		dev_err(chip->dev, "Unable to read CHGR_STS rc = %d\n", rc);
+		goto discharge_while_plugged_check_error;
+	}
+
+	chg_type = (reg & CHG_TYPE_MASK) >> CHG_TYPE_SHIFT;
+	mutex_lock(&chip->battchg_disabled_lock);
+	valid_chg_disabled = !!chip->battchg_disabled;
+	mutex_unlock(&chip->battchg_disabled_lock);
+
+	/* charging disabled due to valid disabling reason or charging
+	 * type is is not charging, or battery full
+	 * fall through to increment counter
+	 */
+	if ( valid_chg_disabled || chg_type != BATT_NOT_CHG_VAL ||
+		status_full || chg_inhibit)  {
+		atomic_set(&chip->discharge_while_plugged_event_count, 0);
+		goto discharge_while_plugged_check_next;
+	}
+
+	/* wa_check failed threshold times */
+	if (atomic_inc_return(&chip->discharge_while_plugged_event_count)
+			>= DISCHARGE_WHILE_PLUGGED_THRESHOLD) {
+		pr_smb(PR_MISC, "discharging while plugged !!\n");
+		smbchg_battchg_en(chip, false,
+			REASON_BATTCHG_WRKARND_DISCHG_PLUG, &unused);
+		msleep(200);
+		smbchg_battchg_en(chip, true,
+			REASON_BATTCHG_WRKARND_DISCHG_PLUG, &unused);
+		atomic_set(&chip->discharge_while_plugged_event_count, 0);
+	}
+discharge_while_plugged_check_next:
+	pr_smb(PR_MISC, "count:%d sf:%d ci:%d ct:%d vd:%d\n",
+		atomic_read(&chip->discharge_while_plugged_event_count),
+		status_full, chg_inhibit, chg_type, valid_chg_disabled);
+discharge_while_plugged_check_error:
+	schedule_delayed_work(&chip->discharge_while_plugged_work,
+		msecs_to_jiffies(DISCHARGE_WHILE_PLUGGED_LOOP_TIME_MS));
+}
+
+static int vf_adjust_low_threshold = 5;
+module_param(vf_adjust_low_threshold, int, 0644);
+
 static int vf_adjust_high_threshold = 7;
 module_param(vf_adjust_high_threshold, int, 0644);
 
@@ -6003,6 +6112,8 @@ static int smbchg_probe(struct spmi_device *spmi)
 						rc);
 			return rc;
 		}
+	} else {
+		vadc_dev = NULL;
 	}
 
 	chip = devm_kzalloc(&spmi->dev, sizeof(*chip), GFP_KERNEL);
