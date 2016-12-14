@@ -165,6 +165,8 @@ SYSCALL_DEFINE1(syncfs, int, fd)
 	if (!fsync_enabled)
 		return 0;
 
+	f = fdget(fd);
+
 	if (!f.file)
 		return -EBADF;
 	sb = f.file->f_dentry->d_sb;
@@ -220,9 +222,6 @@ static int do_fsync(unsigned int fd, int datasync)
 {
 	struct fd f;
 	int ret = -EBADF;
-
-	if (!fsync_enabled)
-		return 0;
 
 	if (!fsync_enabled)
 		return 0;
