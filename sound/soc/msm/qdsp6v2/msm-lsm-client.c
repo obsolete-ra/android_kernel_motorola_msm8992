@@ -37,6 +37,7 @@
 #define CAPTURE_MAX_NUM_PERIODS     8
 #define CAPTURE_MAX_PERIOD_SIZE     4096
 #define CAPTURE_MIN_PERIOD_SIZE     320
+#define LISTEN_MAX_STATUS_PAYLOAD_SIZE 256
 
 #define LAB_BUFFER_ALLOC 1
 #define LAB_BUFFER_DEALLOC 0
@@ -83,6 +84,7 @@ struct lsm_priv {
 	atomic_t buf_count;
 	atomic_t read_abort;
 	wait_queue_head_t period_wait;
+	struct mutex lsm_api_lock;
 	int appl_cnt;
 	int dma_write;
 };
@@ -533,12 +535,20 @@ static int msm_lsm_ioctl_shared(struct snd_pcm_substream *substream,
 	case SNDRV_LSM_EVENT_STATUS:
 		pr_debug("%s: Get event status\n", __func__);
 		atomic_set(&prtd->event_wait_stop, 0);
+
+		/*
+		 * Release the api lock before wait to allow
+		 * other IOCTLs to be invoked while waiting
+		 * for event
+		 */
+		mutex_unlock(&prtd->lsm_api_lock);
 		rc = wait_event_freezable(prtd->event_wait,
 				(cmpxchg(&prtd->event_avail, 1, 0) ||
 				 (xchg = atomic_cmpxchg(&prtd->event_wait_stop,
 							1, 0))));
 		pr_debug("%s: wait_event_freezable %d event_wait_stop %d\n",
 			 __func__, rc, xchg);
+		mutex_lock(&prtd->lsm_api_lock);
 		if (!rc && !xchg) {
 			pr_debug("%s: New event available %ld\n", __func__,
 				 prtd->event_avail);
@@ -761,10 +771,16 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime;
 	int err = 0;
 	u32 size = 0;
+	struct lsm_priv *prtd;
 
 	if (PCM_RUNTIME_CHECK(substream))
 		return -ENXIO;
 	runtime = substream->runtime;
+	prtd = runtime->private_data;
+        rtd = substream->private_data;
+
+	mutex_lock(&prtd->lsm_api_lock);
+
 	switch (cmd) {
 	case SNDRV_LSM_REG_SND_MODEL32: {
 		struct snd_lsm_sound_model32 snd_model32;
@@ -797,15 +813,27 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 		struct snd_lsm_event_status *user = NULL;
 		if (copy_from_user(&userarg32, arg, sizeof(userarg32))) {
 			pr_err("%s: err copyuser ioctl %s\n",
-			__func__, "SNDRV_LSM_EVENT_STATUS32");
-			return -EFAULT;
+			__func__, "SNDRV_LSM_EVENT_STATUS");
+			err = -EFAULT;
+			goto done;
 		}
+
+		if (userarg32.payload_size >
+		    LISTEN_MAX_STATUS_PAYLOAD_SIZE) {
+			pr_err("%s: payload_size %d is invalid, max allowed = %d\n",
+				__func__, userarg32.payload_size,
+				LISTEN_MAX_STATUS_PAYLOAD_SIZE);
+			err = -EINVAL;
+			goto done;
+		}
+
 		size = sizeof(*user) + userarg32.payload_size;
 		user = kmalloc(size, GFP_KERNEL);
 		if (!user) {
 			pr_err("%s: Allocation failed event status size %d\n",
 			__func__, size);
-			return -EFAULT;
+			err = -EFAULT;
+			goto done;
 		} else {
 			cmd = SNDRV_LSM_EVENT_STATUS;
 			user->payload_size = userarg32.payload_size;
@@ -845,6 +873,7 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 	case SNDRV_LSM_REG_SND_MODEL_V2_32: {
 		struct snd_lsm_sound_model_v2_32 snd_modelv232;
 		struct snd_lsm_sound_model_v2 snd_modelv2;
+
 		if (copy_from_user(&snd_modelv232, arg,
 			sizeof(snd_modelv232))) {
 			err = -EFAULT;
@@ -874,6 +903,7 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 	case SNDRV_LSM_SET_PARAMS_32:{
 		struct snd_lsm_detection_params_32 det_params32;
 		struct snd_lsm_detection_params det_params;
+
 		if (copy_from_user(&det_params32, arg,
 				   sizeof(det_params32))) {
 			err = -EFAULT;
@@ -902,6 +932,8 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 		err = msm_lsm_ioctl_shared(substream, cmd, arg);
 		break;
 	}
+done:
+	mutex_unlock(&prtd->lsm_api_lock);
 	return err;
 }
 #else
@@ -913,12 +945,17 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 {
 	int err = 0;
 	u32 size = 0;
-	struct snd_lsm_session_data session_data;
+	struct snd_pcm_runtime *runtime;
+	struct lsm_priv *prtd;
 
 	if (!substream) {
 		pr_err("%s: Invalid params\n", __func__);
 		return -EINVAL;
 	}
+	runtime = substream->runtime;
+	prtd = runtime->private_data;
+
+	mutex_lock(&prtd->lsm_api_lock);
 	switch (cmd) {
 	case SNDRV_LSM_SET_SESSION_DATA:
 		pr_debug("%s: SNDRV_LSM_SET_SESSION_DATA\n", __func__);
@@ -953,7 +990,7 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 		if (err)
 			pr_err("%s REG_SND_MODEL failed err %d\n",
 			__func__, err);
-		return err;
+		goto done;
 		}
 		break;
 	case SNDRV_LSM_REG_SND_MODEL: {
@@ -962,6 +999,7 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 		if (!arg) {
 			pr_err("%s: Invalid params snd_model\n", __func__);
 			return -EINVAL;
+			goto done;
 		}
 		if (copy_from_user(&snd_model, arg, sizeof(snd_model))) {
 			err = -EFAULT;
@@ -973,7 +1011,7 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 		if (err)
 			pr_err("%s REG_SND_MODEL failed err %d\n",
 			__func__, err);
-		return err;
+		goto done;
 	}
 	case SNDRV_LSM_SET_PARAMS: {
 		struct snd_lsm_detection_params det_params;
@@ -999,7 +1037,7 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 		else
 			pr_err("%s: LSM_SET_PARAMS failed, err %d\n",
 				__func__, err);
-		return err;
+		goto done;
 	}
 
 	case SNDRV_LSM_EVENT_STATUS: {
@@ -1012,15 +1050,27 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 		if (copy_from_user(&userarg, arg, sizeof(userarg))) {
 			pr_err("%s: err copyuser event_status\n",
 			__func__);
-			return -EFAULT;
+			err = -EFAULT;
+			goto done;
 		}
+
+		if (userarg.payload_size >
+		    LISTEN_MAX_STATUS_PAYLOAD_SIZE) {
+			pr_err("%s: payload_size %d is invalid, max allowed = %d\n",
+				__func__, userarg.payload_size,
+				LISTEN_MAX_STATUS_PAYLOAD_SIZE);
+			err = -EINVAL;
+			goto done;
+		}
+
 		size = sizeof(struct snd_lsm_event_status) +
 		userarg.payload_size;
 		user = kmalloc(size, GFP_KERNEL);
 		if (!user) {
 			pr_err("%s: Allocation failed event status size %d\n",
 			__func__, size);
-			return -EFAULT;
+			err = -EFAULT;
+			goto done;
 		} else {
 			user->payload_size = userarg.payload_size;
 			err = msm_lsm_ioctl_shared(substream, cmd, user);
@@ -1040,12 +1090,14 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 		kfree(user);
 		if (err)
 			pr_err("%s: lsmevent failed %d", __func__, err);
-		return err;
+		goto done;
 	}
 	default:
 		err = msm_lsm_ioctl_shared(substream, cmd, arg);
 	break;
 	}
+done:
+	mutex_unlock(&prtd->lsm_api_lock);
 	return err;
 }
 
@@ -1062,6 +1114,7 @@ static int msm_lsm_open(struct snd_pcm_substream *substream)
 		       __func__);
 		return -ENOMEM;
 	}
+	mutex_init(&prtd->lsm_api_lock);
 	spin_lock_init(&prtd->event_lock);
 	init_waitqueue_head(&prtd->event_wait);
 	init_waitqueue_head(&prtd->period_wait);
@@ -1164,6 +1217,7 @@ static int msm_lsm_close(struct snd_pcm_substream *substream)
 	kfree(prtd->event_status);
 	prtd->event_status = NULL;
 	spin_unlock_irqrestore(&prtd->event_lock, flags);
+	mutex_destroy(&prtd->lsm_api_lock);
 	kfree(prtd);
 
 	return 0;
