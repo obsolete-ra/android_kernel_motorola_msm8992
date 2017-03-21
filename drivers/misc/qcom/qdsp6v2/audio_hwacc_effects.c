@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -227,7 +227,7 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 		if (!rc) {
 			pr_err("%s: write wait_event_timeout\n", __func__);
 			rc = -EFAULT;
-			 mutex_unlock(&effects->lock);
+			mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 		if (!atomic_read(&effects->out_count)) {
