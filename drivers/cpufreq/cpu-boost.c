@@ -26,6 +26,7 @@
 
 struct cpu_sync {
 	int cpu;
+	unsigned int boost_min;
 	unsigned int input_boost_min;
 	unsigned int input_boost_freq;
 	unsigned int nr_running;
@@ -135,7 +136,9 @@ static int boost_adjust_notify(struct notifier_block *nb, unsigned long val,
 	struct cpufreq_policy *policy = data;
 	unsigned int cpu = policy->cpu;
 	struct cpu_sync *s = &per_cpu(sync_info, cpu);
+	unsigned int b_min = s->boost_min;
 	unsigned int ib_min = s->input_boost_min;
+	unsigned int min;
 
 	switch (val) {
 	case CPUFREQ_ADJUST:
