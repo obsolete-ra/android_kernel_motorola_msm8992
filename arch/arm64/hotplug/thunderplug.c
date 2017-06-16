@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * A simple hotplugging driver optimized for Octa Core CPUs
+ * A simple hotplugging driver optimized for Hex Core CPUs
  */
 
 #include <linux/module.h>
@@ -22,10 +22,10 @@
 #include <linux/lcd_notify.h>
 #include <linux/cpufreq.h>
 
-static int suspend_cpu_num = 2, resume_cpu_num = 7;
+static int suspend_cpu_num = 2, resume_cpu_num = 5;
 static int endurance_level = 0;
-static int device_cpus = 8;
-static int core_limit = 8;
+static int device_cpus = 6;
+static int core_limit = 6;
 
 static bool isSuspended = false;
 
@@ -87,7 +87,7 @@ static inline void offline_cpus(void)
 		default:
 		break;
 	}
-	for(cpu = 7; cpu > (suspend_cpu_num - 1); cpu--) {
+	for(cpu = 5; cpu > (suspend_cpu_num - 1); cpu--) {
 		if (cpu_online(cpu))
 			cpu_down(cpu);
 	}
@@ -107,8 +107,8 @@ static inline void cpus_online_all(void)
 			resume_cpu_num = 1;
 	break;
 	case 0:
-		if(resume_cpu_num < 7)
-			resume_cpu_num = 7;
+		if(resume_cpu_num < 5)
+			resume_cpu_num = 5;
 	break;
 	default:
 	break;
@@ -204,7 +204,7 @@ static ssize_t thunderplug_suspend_cpus_store(struct kobject *kobj, struct kobj_
 {
 	int val;
 	sscanf(buf, "%d", &val);
-	if(val < 1 || val > 8)
+	if(val < 1 || val > 6)
 		pr_info("%s: suspend cpus off-limits\n", THUNDERPLUG);
 	else
 		suspend_cpu_num = val;
@@ -375,7 +375,7 @@ static void __cpuinit tplug_work_fn(struct work_struct *work)
 	switch(endurance_level)
 	{
 	case 0:
-		core_limit = 8;
+		core_limit = 6;
 	break;
 	case 1:
 		core_limit = 4;
@@ -384,7 +384,7 @@ static void __cpuinit tplug_work_fn(struct work_struct *work)
 		core_limit = 2;
 	break;
 	default:
-		core_limit = 8;
+		core_limit = 6;
 	break;
 	}
 
@@ -571,6 +571,6 @@ static int __init thunderplug_init(void)
 
 MODULE_LICENSE("GPL and additional rights");
 MODULE_AUTHOR("Varun Chitre <varun.chitre15@gmail.com>");
-MODULE_DESCRIPTION("Hotplug driver for OctaCore CPU");
+MODULE_DESCRIPTION("Hotplug driver for HexaCore CPU");
 late_initcall(thunderplug_init);
 
