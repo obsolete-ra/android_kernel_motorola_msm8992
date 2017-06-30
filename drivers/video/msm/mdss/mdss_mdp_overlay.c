@@ -2797,8 +2797,8 @@ static ssize_t te_enable_store(struct device *dev,
 	int r = 0;
 	int i, mux;
 
-	if (!ctl || !mdp5_data) {
-		pr_warn("there is no ctl or mdp5_data attached to fb\n");
+	if (!ctl) {
+		pr_debug("there is no ctl attached to fb\n");
 		r = -ENODEV;
 		goto end;
 	}
@@ -2817,24 +2817,21 @@ static ssize_t te_enable_store(struct device *dev,
 		goto end;
 	}
 
-	mutex_lock(&mdp5_data->ov_lock);
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
-
-	if (te_status == enable) {
-		pr_info("te_status is not changed. Do nothing\n");
-		goto locked_end;
+	mutex_lock(&ctl->offlock);
+	if (!mdss_fb_is_power_on(mfd)) {
+		pr_debug("panel is not powered\n");
+		r = -EPERM;
+		goto unlock;
 	}
 
-	if (enable) {
-		r = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_ENABLE_TE,
-			(void *) (long int) enable);
-		if (r) {
-			pr_err("%s: Failed sending TE command, r=%d\n",
-						__func__, r);
-			r = -EFAULT;
-			goto locked_end;
-		} else
-			te_status = enable;
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
+	r = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_ENABLE_HBM,
+				(void *)(unsigned long)enable);
+	if (r) {
+		pr_err("Failed sending HBM command, r = %d\n", r);
+		r = -EFAULT;
+	} else {
+		pr_debug("HBM state changed by sysfs, state = %d\n", enable);
 	}
 
 	for (i = 0; i < 2; i++) {
