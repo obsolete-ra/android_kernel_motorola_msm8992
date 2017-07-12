@@ -1962,7 +1962,6 @@ static int msm_cpp_cfg_frame(struct cpp_device *cpp_dev,
 			(UINT_MAX - 1 - stripe_base) / stripe_size)) {
 		pr_err("Invalid frame message, num_strips %d is large\n",
 			new_frame->num_strips);
->>>>>>> 21d422e... msm: camera2: cpp: Fix out-of-bounds frame or command buffer access
 		return -EINVAL;
 	}
 
