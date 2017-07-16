@@ -769,6 +769,7 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 			  unsigned int cmd, void __user *arg)
 {
 	struct snd_pcm_runtime *runtime;
+    struct snd_soc_pcm_runtime *rtd;
 	int err = 0;
 	u32 size = 0;
 	struct lsm_priv *prtd;
@@ -947,6 +948,7 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 	u32 size = 0;
 	struct snd_pcm_runtime *runtime;
 	struct lsm_priv *prtd;
+	struct snd_lsm_session_data session_data;
 
 	if (!substream) {
 		pr_err("%s: Invalid params\n", __func__);
