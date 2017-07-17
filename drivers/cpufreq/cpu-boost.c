@@ -24,8 +24,6 @@
 #include <linux/time.h>
 #include "../../kernel/sched/sched.h"
 
-#include "../../kernel/sched/sched.h"
-
 struct cpu_sync {
 	int cpu;
 	unsigned int boost_min;
