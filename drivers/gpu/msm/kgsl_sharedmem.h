@@ -397,6 +397,5 @@ static inline void kgsl_free_sgt(struct sg_table *sgt)
                 kfree(sgt);
         }
 }
->>>>>>> f602f8f... msm: kgsl: Use per page cache operation instead of bulk cache operation
 
 #endif /* __KGSL_SHAREDMEM_H */
