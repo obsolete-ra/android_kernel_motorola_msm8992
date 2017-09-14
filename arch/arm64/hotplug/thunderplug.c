@@ -31,25 +31,21 @@ static bool isSuspended = false;
 
 struct notifier_block lcd_worker;
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define THUNDERPLUG "thunderplug"
 
 #define DRIVER_VERSION  2
-#define DRIVER_SUBVER 6
+#define DRIVER_SUBVER 5
 
-#define CPU_LOAD_HIGH_THRESHOLD        (40)
-#define CPU_LOAD_LOW_THRESHOLD        (20)
+#define CPU_LOAD_THRESHOLD        (65)
 
 #define DEF_SAMPLING_MS			(500)
-#define MIN_CPU_UP_TIME			(750)
-
-static int now[6], last_time[6];
 
 static int sampling_time = DEF_SAMPLING_MS;
-static int load_threshold = CPU_LOAD_HIGH_THRESHOLD;
+static int load_threshold = CPU_LOAD_THRESHOLD;
 
-static int tplug_hp_enabled = 0;
+static int tplug_hp_enabled = 1;
 
 static int touch_boost_enabled = 0;
 
@@ -62,10 +58,7 @@ static struct delayed_work tplug_boost;
 static struct workqueue_struct *tplug_resume_wq;
 static struct delayed_work tplug_resume_work;
 
-static unsigned int last_load[6] = {0, 0, 0, 0, 0, 0};
-
-// Order of CPUs to wake up / shutdownn. 4,5 - big cores
-static unsigned int cpuidx[6] = {0, 4, 1, 2, 5, 3};
+static unsigned int last_load[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 struct cpu_load_data {
 	u64 prev_cpu_idle;
@@ -81,7 +74,7 @@ static DEFINE_PER_CPU(struct cpu_load_data, cpuload);
 
 static inline void offline_cpus(void)
 {
-	unsigned int cpu,j;
+	unsigned int cpu;
 	switch(endurance_level) {
 		case 1:
 			if(suspend_cpu_num > 4)
@@ -94,9 +87,7 @@ static inline void offline_cpus(void)
 		default:
 		break;
 	}
-	for(j = suspend_cpu_num ; j < core_limit; j++)
-	{
-		cpu = cpuidx[j];
+	for(cpu = 5; cpu > (suspend_cpu_num - 1); cpu--) {
 		if (cpu_online(cpu))
 			cpu_down(cpu);
 	}
@@ -105,7 +96,7 @@ static inline void offline_cpus(void)
 
 static inline void cpus_online_all(void)
 {
-	unsigned int cpu,j;
+	unsigned int cpu;
 	switch(endurance_level) {
 	case 1:
 		if(resume_cpu_num > 3 || resume_cpu_num == 1)
@@ -123,9 +114,7 @@ static inline void cpus_online_all(void)
 	break;
 	}
 
-	for(j = suspend_cpu_num ; j < core_limit; j++)
-	{
-		cpu = cpuidx[j];
+	for (cpu = 1; cpu <= resume_cpu_num; cpu++) {
 		if (cpu_is_offline(cpu))
 			cpu_up(cpu);
 	}
@@ -136,7 +125,7 @@ static inline void cpus_online_all(void)
 static void __ref tplug_boost_work_fn(struct work_struct *work)
 {
 	int cpu;
-	for(cpu = 1; cpu < 6; cpu++) {
+	for(cpu = 1; cpu < 4; cpu++) {
 		if(cpu_is_offline(cpu))
 			cpu_up(cpu);
 	}
@@ -378,21 +367,10 @@ static void __cpuinit tplug_resume_work_fn(struct work_struct *work)
 	thunderplug_resume();
 }
 
-static void print_cpus_all(void)
-{
-	unsigned int cpu;
-
-	for (cpu = 0; cpu < core_limit; cpu++) {
-		pr_info("%s: [%d]: %d\n", THUNDERPLUG, cpu, cpu_is_offline(cpu)?0:1);
-	}
-}
-
 static void __cpuinit tplug_work_fn(struct work_struct *work)
 {
-
-	int i,j;
-	unsigned int load[6], avg_load[6];
-	unsigned int avg_cpu_load;
+	int i;
+	unsigned int load[8], avg_load[8];
 
 	switch(endurance_level)
 	{
@@ -421,52 +399,22 @@ static void __cpuinit tplug_work_fn(struct work_struct *work)
 		last_load[i] = load[i];
 	}
 
-	// First, decide if to get some CPU online
-	// CPU 0 is always online
-	
-	avg_cpu_load = avg_load[0];
-
-	for(j = suspend_cpu_num ; j < core_limit; j++)
+	for(i = 0 ; i < core_limit; i++)
 	{
-		i = cpuidx[j];
-		if (cpu_is_offline(i)) {
-			if (avg_cpu_load > load_threshold) {
-			if(DEBUG)
-				pr_info("%s : bringing back cpu%d, load avg: %d\n", THUNDERPLUG,i,avg_cpu_load);
-				last_time[i] = ktime_to_ms(ktime_get());
-				cpu_up(i);
-				print_cpus_all();	
-				break;
-			}
-		}else{
-			avg_cpu_load = (avg_cpu_load + avg_load[i]*j)/(j+1);
-		}
+	if(cpu_online(i) && avg_load[i] > load_threshold && cpu_is_offline(i+1))
+	{
+	if(DEBUG)
+		pr_info("%s : bringing back cpu%d\n", THUNDERPLUG,i);
+		if(!((i+1) > 7))
+			cpu_up(i+1);
 	}
-
-	// Now check if any CPU we can put offline
-	avg_cpu_load = avg_load[0];
-
-	for(j = suspend_cpu_num; j < core_limit; j++)
+	else if(cpu_online(i) && avg_load[i] < load_threshold && cpu_online(i+1))
 	{
-		i = cpuidx[j];
-		// if next CPU is already offline or if this is last CPU
-		if (cpu_online(i)) {
-		if ((j==(core_limit-1) ) || cpu_is_offline(cpuidx[j+1])) {
-			if (avg_cpu_load < CPU_LOAD_LOW_THRESHOLD) {
-				now[i] = ktime_to_ms(ktime_get());
-				if((now[i] - last_time[i]) > MIN_CPU_UP_TIME)
-				{
-			if(DEBUG)
-				pr_info("%s : offlining cpu%d, load avg: %d\n", THUNDERPLUG,i,avg_cpu_load);
-					cpu_down(i);
-					print_cpus_all();	
-				}
-				break;
-			}
-		}else{
-			avg_cpu_load = (avg_cpu_load + avg_load[i]*j)/(j+1);
-		}
-		}
+	if(DEBUG)
+		pr_info("%s : offlining cpu%d\n", THUNDERPLUG,i);
+		if(!(i+1)==0)
+			cpu_down(i+1);
+	}
 	}
 
 	if(tplug_hp_enabled != 0 && !isSuspended)
