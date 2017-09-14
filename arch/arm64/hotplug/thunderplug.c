@@ -58,7 +58,7 @@ static struct delayed_work tplug_boost;
 static struct workqueue_struct *tplug_resume_wq;
 static struct delayed_work tplug_resume_work;
 
-static unsigned int last_load[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+static unsigned int last_load[6] = {0, 0, 0, 0, 0, 0};
 
 struct cpu_load_data {
 	u64 prev_cpu_idle;
@@ -370,7 +370,7 @@ static void __cpuinit tplug_resume_work_fn(struct work_struct *work)
 static void __cpuinit tplug_work_fn(struct work_struct *work)
 {
 	int i;
-	unsigned int load[8], avg_load[8];
+	unsigned int load[6], avg_load[6];
 
 	switch(endurance_level)
 	{
