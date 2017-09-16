@@ -22,15 +22,16 @@
 
 #define MSM_SLEEPER "msm_sleeper"
 #define MSM_SLEEPER_MAJOR_VERSION	4
-#define MSM_SLEEPER_MINOR_VERSION	0
+#define MSM_SLEEPER_MINOR_VERSION	1
 #define MSM_SLEEPER_ENABLED		1
 #define MSM_SLEEPER_DEBUG		0
 #define DELAY				HZ
-#define DEF_UP_THRESHOLD		80
+#define DEF_UP_THRESHOLD		85
 #define DEF_MAX_ONLINE			4
 #define DEF_DOWN_COUNT_MAX		10 /* 1 sec */
-#define DEF_UP_COUNT_MAX		4 /* 0.4 sec */
+#define DEF_UP_COUNT_MAX		5 /* 0.5 sec */
 #define DEF_SUSPEND_MAX_ONLINE		1
+#define DEF_PLUG_ALL			1
 
 struct msm_sleeper_data {
 	unsigned int enabled;
@@ -43,6 +44,7 @@ struct msm_sleeper_data {
 	unsigned int up_count_max;
 	bool suspended;
 	unsigned int suspend_max_online;
+	bool plug_all;
 	struct notifier_block notif;
 	struct work_struct suspend_work;
 	struct work_struct resume_work;
@@ -54,7 +56,8 @@ struct msm_sleeper_data {
 	.down_count_max = DEF_DOWN_COUNT_MAX,
 	.up_count_max = DEF_UP_COUNT_MAX,
 	.suspended = false,
-	.suspend_max_online = DEF_SUSPEND_MAX_ONLINE
+	.suspend_max_online = DEF_SUSPEND_MAX_ONLINE,
+	.plug_all = DEF_PLUG_ALL
 };
 
 static struct workqueue_struct *sleeper_wq;
@@ -68,7 +71,7 @@ static inline void plug_cpu(void)
 		goto reset;
 
 	cpu = cpumask_next_zero(0, cpu_online_mask);
-	if (cpu < nr_cpu_ids)
+	if (cpu > 0 && cpu <= 6)
 		cpu_up(cpu);
 		
 reset:
@@ -114,6 +117,12 @@ static void hotplug_func(struct work_struct *work)
 	if (sleeper_data.suspended || sleeper_data.max_online == 2)
 		goto reschedule;
 	
+	if (sleeper_data.plug_all) {
+		if (num_online_cpus() < nr_cpuids)
+			plug_cpu();
+		goto reschedule;
+	}
+
 	for_each_online_cpu(cpu)
 		loadavg += cpufreq_quick_get_util(cpu);
 
@@ -158,10 +167,21 @@ static void msm_sleeper_suspend(struct work_struct *work)
 
 static void msm_sleeper_resume(struct work_struct *work)
 {
+	int cpu;
+
 	sleeper_data.suspended = false;
 	
-	if (cpu_is_offline(1))
-		cpu_up(1);
+	if (sleeper_data.max_online == 2) {
+ 		if (cpu_is_offline(1)) {
+ 			cpu_up(1);
+ 		}
+ 	} else if (sleeper_data.plug_all) {
+ 		for_each_possible_cpu(cpu) {
+ 			if (cpu && cpu_is_offline(cpu)) {
+ 				cpu_up(cpu);
+ 			}
+ 		}
+ 	} 
 }
 
 static int fb_notifier_callback(struct notifier_block *this,
@@ -218,12 +238,38 @@ static ssize_t store_enable_hotplug(struct device *dev,
 		flush_workqueue(sleeper_wq);
 		cancel_delayed_work_sync(&sleeper_work);
 
-		for_each_possible_cpu(cpu)
+		for_each_possible_cpu(cpu) {
+			if (cpu == 0)
+				continue;
 			if (cpu_is_offline(cpu))
 				cpu_up(cpu);
+		}
 	}
 
 	return count;
+}
+
+static ssize_t show_plug_all(struct device *dev,
+ 				    struct device_attribute *msm_sleeper_attrs,
+ 				    char *buf)
+{
+ 	return snprintf(buf, PAGE_SIZE, "%u\n", sleeper_data.plug_all);
+}
+ 
+static ssize_t store_plug_all(struct device *dev,
+ 				     struct device_attribute *msm_sleeper_attrs,
+ 				     const char *buf, size_t count)
+{
+ 	int ret;
+ 	unsigned long val;
+ 
+ 	ret = kstrtoul(buf, 0, &val);
+ 	if (ret < 0 || val > 1)
+ 		return -EINVAL;
+ 
+ 	sleeper_data.plug_all = val;
+ 
+ 	return count;
 }
 
 static ssize_t show_max_online(struct device *dev,
@@ -350,6 +396,7 @@ static ssize_t store_down_count_max(struct device *dev,
 
 static DEVICE_ATTR(enabled, 0644, show_enable_hotplug, store_enable_hotplug);
 static DEVICE_ATTR(up_threshold, 0644, show_up_threshold, store_up_threshold);
+static DEVICE_ATTR(plug_all, 0644, show_plug_all, store_plug_all);
 static DEVICE_ATTR(max_online, 0644, show_max_online, store_max_online);
 static DEVICE_ATTR(suspend_max_online, 0644, show_suspend_max_online, store_suspend_max_online);
 static DEVICE_ATTR(up_count_max, 0644, show_up_count_max, store_up_count_max);
@@ -357,6 +404,7 @@ static DEVICE_ATTR(down_count_max, 0644, show_down_count_max, store_down_count_m
 
 static struct attribute *msm_sleeper_attrs[] = {
 	&dev_attr_up_threshold.attr,
+	&dev_attr_plug_all.attr,
 	&dev_attr_max_online.attr,
 	&dev_attr_suspend_max_online.attr,
 	&dev_attr_up_count_max.attr,
