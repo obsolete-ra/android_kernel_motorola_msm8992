@@ -118,7 +118,7 @@ static void hotplug_func(struct work_struct *work)
 		goto reschedule;
 	
 	if (sleeper_data.plug_all) {
-		if (num_online_cpus() < nr_cpuids)
+		if (num_online_cpus() < nr_cpu_ids)
 			plug_cpu();
 		goto reschedule;
 	}
