@@ -547,7 +547,7 @@ static void dpm_resume_noirq(pm_message_t state)
  *
  * Runtime PM is disabled for @dev while this function is being executed.
  */
-static int device_resume_early(struct device *dev, pm_message_t state)
+static int device_resume_early(struct device *dev, pm_message_t state, bool async)
 {
 	pm_callback_t callback = NULL;
 	char *info = NULL;
@@ -587,18 +587,6 @@ static int device_resume_early(struct device *dev, pm_message_t state)
 	return error;
 }
 
-static void async_resume_early(void *data, async_cookie_t cookie)
-{
-	struct device *dev = (struct device *)data;
-	int error;
-
-	error = device_resume_early(dev, pm_transition, true);
-	if (error)
-		pm_dev_err(dev, pm_transition, " async", error);
-
-	put_device(dev);
-}
-
 extern void print_active_wakeup_sources(void);
 
 /**
@@ -622,7 +610,7 @@ static void dpm_resume_early(pm_message_t state)
 		list_move_tail(&dev->power.entry, &dpm_suspended_list);
 		mutex_unlock(&dpm_list_mtx);
 
-		error = device_resume_early(dev, state);
+		error = device_resume_early(dev, state, false);
 		if (error) {
 			suspend_stats.failed_resume_early++;
 			dpm_save_failed_step(SUSPEND_RESUME_EARLY);
