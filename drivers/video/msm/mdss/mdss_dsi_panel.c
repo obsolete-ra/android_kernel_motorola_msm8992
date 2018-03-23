@@ -1035,12 +1035,12 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	if (ctrl->panel_config.bare_board == true)
 		goto end;
 
-	if (ctrl->set_hbm)
+/*	if (ctrl->set_hbm)
 		ctrl->set_hbm(ctrl, 0);
 
 	if (ctrl->set_acl)
 		ctrl->set_acl(ctrl, 1);
-
+*/
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
         if (prevent_sleep) {
                 ctrl->off_cmds.cmds[1].payload[0] = 0x11;
