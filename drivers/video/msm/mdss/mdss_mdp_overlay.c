@@ -2821,7 +2821,7 @@ static ssize_t te_enable_store(struct device *dev,
 	if (!mdss_fb_is_power_on(mfd)) {
 		pr_debug("panel is not powered\n");
 		r = -EPERM;
-		goto locked_end;
+		goto unlock;
 	}
 
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
