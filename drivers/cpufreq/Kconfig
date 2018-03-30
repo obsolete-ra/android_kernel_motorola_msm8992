@@ -122,7 +122,12 @@ config CPU_FREQ_DEFAULT_GOV_LIONFISH
 	bool "lionfish"
 	select CPU_FREQ_GOV_LIONFISH
 	help
-	  Use the CPUFreq governor 'lionfish' as default.	
+	  Use the CPUFreq governor 'lionfish' as default.
+
+config CPU_FREQ_DEFAULT_GOV_DARKNESS
+	bool "darkness"
+	select CPU_FREQ_GOV_DARKNESS
+	help	
 
 endchoice
 
@@ -218,7 +223,12 @@ config CPU_FREQ_GOV_LIONFISH
 	  To compile this driver as a module, choose M here: the
 	  module will be called cpufreq_lionfish.
 
-	  If in doubt, say N.	
+	  If in doubt, say N.
+
+config CPU_FREQ_GOV_DARKNESS
+	tristate "'darkness' cpufreq governor"
+	depends on CPU_FREQ
+	select CPU_FREQ_GOV_COMMON	
 
 config CPU_BOOST
 	tristate "Event base short term CPU freq boost"
