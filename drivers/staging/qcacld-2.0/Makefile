@@ -1,5 +1,9 @@
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 
+CFLAGS_KERNEL := -fno-strict-aliasing
+
+CFLAGS_KERNEL := -fno-strict-aliasing
+
 KBUILD_OPTIONS := WLAN_ROOT=$(PWD)
 KBUILD_OPTIONS += MODNAME?=wlan
 

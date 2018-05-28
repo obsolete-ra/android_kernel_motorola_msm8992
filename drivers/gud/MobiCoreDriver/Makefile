@@ -2,10 +2,8 @@
 # this makefile is called from the kernel make system. Thus we basically
 # add things to "obj-m" here.
 
-CFLAGS_main.o := -fno-strict-aliasing
-
 ifeq ($(MODE),release)
-    ccflags-y = -O2 -DNDEBUG -fno-strict-aliasing
+    ccflags-y = -O2 -DNDEBUG
 else
     ccflags-y = -DDEBUG
 endif # DEBUG/RELEASE

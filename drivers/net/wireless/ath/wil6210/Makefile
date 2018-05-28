@@ -1,6 +1,3 @@
-CFLAGS_main.o := -fno-strict-aliasing
-CFLAGS_netdev.o := -fno-strict-aliasing
-
 obj-$(CONFIG_WIL6210) += wil6210.o
 
 wil6210-y := main.o
@@ -23,4 +20,4 @@ wil6210-y += ethtool.o
 # for tracing framework to find trace.h
 CFLAGS_trace.o := -I$(src)
 
-subdir-ccflags-y += -D__CHECK_ENDIAN__ -fno-strict-aliasing
+subdir-ccflags-y += -D__CHECK_ENDIAN__

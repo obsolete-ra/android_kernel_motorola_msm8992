@@ -1,5 +1,3 @@
-CFLAGS_KERNEL := -fno-strict-aliasing
-
 obj-$(CONFIG_DIAG_CHAR) := diagchar.o
 obj-$(CONFIG_DIAGFWD_BRIDGE_CODE) += diagfwd_bridge.o
 obj-$(CONFIG_DIAGFWD_BRIDGE_CODE) += diagfwd_hsic.o

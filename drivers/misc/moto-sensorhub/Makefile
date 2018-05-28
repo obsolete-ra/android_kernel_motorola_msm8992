@@ -1,5 +1,3 @@
-CFLAGS_motosh_irq.o := -fno-strict-aliasing
-
 motosh-objs := motosh_core.o \
 		motosh_flash.o \
 		motosh_ioctl.o \

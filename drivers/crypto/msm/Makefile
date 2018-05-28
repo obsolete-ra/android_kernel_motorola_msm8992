@@ -1,5 +1,3 @@
-CFLAGS_KERNEL := -fno-strict-aliasing
-
 ifneq ($(CONFIG_FIPS_ENABLE), y)
 obj-$(CONFIG_CRYPTO_DEV_QCEDEV) += qcedev.o
 ifeq ($(CONFIG_CRYPTO_DEV_QCE50), y)
