@@ -244,10 +244,12 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
+GRAPHITE = -fgraphite -fgraphite-identity -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -ftree-loop-linear -floop-nest-optimize
+
 HOSTCC       = gcc
 HOSTCXX      = g++
-HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer
-HOSTCXXFLAGS = -O2
+HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fgcse-las -flto -fomit-frame-pointer -pthread $(GRAPHITE)
+HOSTCXXFLAGS = -pipe -O3 -flto=4 $(GRAPHITE)
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -385,13 +387,16 @@ LINUXINCLUDE    := \
 KBUILD_CPPFLAGS := -D__KERNEL__
 
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
-            -fno-common -Werror-implicit-function-declaration \
+            -fno-strict-aliasing -fno-common \
+            -Werror-implicit-function-declaration \
             -Wno-format-security -funswitch-loops -fpredictive-commoning -fgcse-after-reload \
             -fno-delete-null-pointer-checks -ftree-vectorize \
             -ftree-loop-distribution -ftree-loop-if-convert -fivopts -fipa-pta -fira-hoist-pressure \
             -march=armv8-a+crc -fbranch-target-load-optimize -fsingle-precision-constant \
             -mtune=cortex-a57.cortex-a53 -ffast-math \
-            -floop-nest-optimize 
+            -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr \
+		    -floop-nest-optimize  $(GRAPHITE)
+
 
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
@@ -592,7 +597,7 @@ all: vmlinux
 #ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 #KBUILD_CFLAGS	+= -Os
 #else
-KBUILD_CFLAGS +=  $(call cc-disable-warning,maybe-uninitialized) -O2 -g0 -fmodulo-sched -fmodulo-sched-allow-regmoves -fno-tree-vectorize -Wno-array-bounds -fivopts -fno-inline-functions
+KBUILD_CFLAGS +=  $(call cc-disable-warning,maybe-uninitialized) -O3 -g0 -fmodulo-sched -fmodulo-sched-allow-regmoves -fno-tree-vectorize -Wno-array-bounds -fivopts -fno-inline-functions
 #endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile
