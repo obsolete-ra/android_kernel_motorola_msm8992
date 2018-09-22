@@ -1,18 +1,3 @@
-config AUTOSMP
-	bool "Multi-core automatic hotplug support"
-	depends on SMP && HOTPLUG_CPU
-	default n
-	help
-	  Automatically hotplugs the multiple cpu cores on and off
-	  based on cpu load and suspend state.
-  
-config BLU_PLUG
-	bool "Dynamic hotplug driver"
-	depends on HOTPLUG_CPU
-	default n
-	help
-          The Dynamic hotplug driver automatically online/offline CPUs proportional to system load. 
-
 config MSM_HOTPLUG
 	bool "MSM hotplug driver"
 	depends on HOTPLUG_CPU
